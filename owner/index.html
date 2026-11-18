@@ -269,7 +269,8 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
 
   // ---------- state ----------
   function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);const o=localStorage.getItem('hauus-revisit-v1');if(o){const v=JSON.parse(o);return {records:v.records||{},sent:v.sent||{},log:v.log||[],links:v.links||{},stock:v.stock||{}}}}catch(e){}return null}
-  const state=Object.assign({records:{},sent:{},memos:{},log:[],weeks:{perm:5,ext:3,touch:3},tpl:{...DEFAULT_T},links:{care:'https://claude.ai/artifact/SSxBJbNgkxzUUHsS4GmFHR',naver:'https://naver.me/FkambIDP'},stock:{a:'2',b:'2'}},load()||{});
+  const state=Object.assign({records:{},sent:{},memos:{},log:[],weeks:{perm:5,ext:3,touch:3},tpl:{...DEFAULT_T},links:{care:'https://jangyerim.github.io/hauus/',naver:'https://naver.me/FkambIDP'},stock:{a:'2',b:'2'}},load()||{});
+  if(!state.links.care||/claude\.ai\/artifact/.test(state.links.care))state.links.care='https://jangyerim.github.io/hauus/';
   if(typeof state.weeks==='number')state.weeks={perm:state.weeks,ext:Math.max(2,state.weeks-2),touch:Math.max(2,state.weeks-2)};
   state.tpl=Object.assign({...DEFAULT_T},state.tpl||{}); state.memos=state.memos||{}; state.stock=Object.assign({a:'2',b:'2'},state.stock||{});
   function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
