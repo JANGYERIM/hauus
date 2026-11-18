@@ -219,6 +219,8 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
   <div class="card"><svg class="chart" id="chRev" viewBox="0 0 640 220" role="img" aria-label="월별 매출 막대 그래프"></svg><div class="legend"><span><i style="background:var(--rose)"></i>매출(만원)</span></div></div>
   <h2>월별 시술 수 · 재방문</h2>
   <div class="card"><svg class="chart" id="chVisits" viewBox="0 0 640 220" role="img" aria-label="월별 시술 수와 재방문 손님 수"></svg><div class="legend"><span><i style="background:var(--line)"></i>전체 시술</span><span><i style="background:var(--ok)"></i>재방문 손님 시술</span></div></div>
+  <h2>리마인드 후 재방문</h2>
+  <div class="card"><svg class="chart" id="chRemind" viewBox="0 0 640 220" role="img" aria-label="월별 리마인드 보낸 손님과 그 후 다시 온 손님 수"></svg><div class="legend"><span><i style="background:var(--line)"></i>리마인드 보낸 손님</span><span><i style="background:var(--rose)"></i>리마인드 후 다시 온 손님</span></div></div>
   <p class="hint">재방문 손님 = 그 달 이전에 한 번이라도 방문한 적 있는 손님. 리마인드 후 다시 온 손님 = 보냄 처리한 날짜 이후에 새 방문 기록이 생긴 손님.</p>
 </section>
 
@@ -400,6 +402,9 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
     const mk=Object.keys(byMonth).sort();
     bars($('chRev'),mk,[{v:mk.map(m=>Math.round(byMonth[m].rev/10000)),c:'var(--rose)'}],v=>v+'만');
     bars($('chVisits'),mk,[{v:mk.map(m=>byMonth[m].n),c:'var(--line)'},{v:mk.map(m=>byMonth[m].ret),c:'var(--ok)'}],v=>v+'');
+    const rmSent={},rmBack={};sentKeys.forEach(k=>{const d=state.sent[k];if(!d)return;const sm=d.slice(0,7);rmSent[sm]=(rmSent[sm]||0)+1;const nx=done.filter(r=>r.name+'|'+r.phone===k&&r.date>d).map(r=>r.date).sort()[0];if(nx){const bm=nx.slice(0,7);rmBack[bm]=(rmBack[bm]||0)+1}});
+    const rk=[...new Set([...Object.keys(rmSent),...Object.keys(rmBack)])].sort();
+    bars($('chRemind'),rk,[{v:rk.map(m=>rmSent[m]||0),c:'var(--line)'},{v:rk.map(m=>rmBack[m]||0),c:'var(--rose)'}],v=>v+'명');
 
     // 설정 값
     $('wPerm').value=state.weeks.perm;$('wExt').value=state.weeks.ext;$('wTouch').value=state.weeks.touch;
