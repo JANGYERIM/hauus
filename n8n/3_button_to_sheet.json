@@ -1,0 +1,140 @@
+{
+ "name": "HAUUS 3 · 승인 버튼 응답 기록",
+ "nodes": [
+  {
+   "parameters": {
+    "updates": [
+     "callback_query"
+    ],
+    "additionalFields": {}
+   },
+   "name": "버튼 눌림 수신",
+   "type": "n8n-nodes-base.telegramTrigger",
+   "typeVersion": 1.1,
+   "position": [
+    0,
+    0
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\n// 텔레그램 버튼 응답 처리: sent|고객명|연락처 또는 skip|고객명|연락처\nconst cb=$json.callback_query; if(!cb)return [];\nconst [act,name,phone]=(cb.data||'').split('|');\nconst today=new Date();const d=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;\nreturn [{json:{act,고객명:name,연락처:phone,보낸날:d,처리:act==='sent'?'보냄':'건너뜀',chat_id:cb.message.chat.id,message_id:cb.message.message_id,cb_id:cb.id,text:cb.message.text}}];\n"
+   },
+   "name": "응답 해석",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "보냄기록"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "고객명": "={{ $json.고객명 }}",
+      "연락처": "={{ $json.연락처 }}",
+      "보낸날": "={{ $json.보낸날 }}",
+      "처리": "={{ $json.처리 }}"
+     },
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "name": "보냄기록 저장",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    0
+   ],
+   "credentials": {
+    "googleSheetsOAuth2Api": {
+     "id": "REPLACE",
+     "name": "Google Sheets account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "operation": "editMessageText",
+    "chatId": "={{ $('응답 해석').item.json.chat_id }}",
+    "messageId": "={{ $('응답 해석').item.json.message_id }}",
+    "text": "={{ $('응답 해석').item.json.text }}\n\n— {{ $('응답 해석').item.json.처리 }} ({{ $('응답 해석').item.json.보낸날 }})",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "name": "메시지에 결과 표시",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    660,
+    0
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "버튼 눌림 수신": {
+   "main": [
+    [
+     {
+      "node": "응답 해석",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "응답 해석": {
+   "main": [
+    [
+     {
+      "node": "보냄기록 저장",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "보냄기록 저장": {
+   "main": [
+    [
+     {
+      "node": "메시지에 결과 표시",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

@@ -1,0 +1,366 @@
+{
+ "name": "HAUUS 2 · 월요일 리마인드 초안 → 텔레그램 승인",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "weeks",
+       "weeksInterval": 1,
+       "triggerAtDay": [
+        1
+       ],
+       "triggerAtHour": 9
+      }
+     ]
+    }
+   },
+   "name": "매주 월요일 09:00",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "read",
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "시술기록"
+    },
+    "options": {}
+   },
+   "name": "시술기록 읽기",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    -80
+   ],
+   "credentials": {
+    "googleSheetsOAuth2Api": {
+     "id": "REPLACE",
+     "name": "Google Sheets account"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "operation": "read",
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "보냄기록"
+    },
+    "options": {}
+   },
+   "name": "보냄기록 읽기",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    100
+   ],
+   "credentials": {
+    "googleSheetsOAuth2Api": {
+     "id": "REPLACE",
+     "name": "Google Sheets account"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "\n// 시술기록 + 보냄기록 → 이번 주 리마인드 대상 (5주+ & 이후 방문 없음 & 아직 안 보냄)\nconst WEEKS=5;\nconst recs=$('시술기록 읽기').all().map(i=>i.json);\nconst sent=$('보냄기록 읽기').all().map(i=>i.json);\nconst today=new Date();today.setHours(0,0,0,0);\nconst skip=/취소|노쇼|거절/;\nconst cust={};\nfor(const r of recs){\n  if(!r.고객명||!r.이용일||skip.test(r.상태||''))continue;\n  const k=`${r.고객명}|${r.연락처}`;\n  const c=cust[k]||(cust[k]={key:k,name:r.고객명,phone:r.연락처,visits:0,last:'',lastService:''});\n  c.visits++; if(r.이용일>c.last){c.last=r.이용일;c.lastService=r.시술}\n}\nconst lastSent={}; for(const s of sent){const k=`${s.고객명}|${s.연락처}`; if(!lastSent[k]||s.보낸날>lastSent[k])lastSent[k]=s.보낸날}\nconst out=[];\nfor(const c of Object.values(cust)){\n  const days=Math.floor((today-new Date(c.last))/86400000);\n  if(days<WEEKS*7)continue;\n  if(lastSent[c.key]&&lastSent[c.key]>=c.last)continue;\n  out.push({json:{...c,days,weeks:Math.floor(days/7)}});\n}\nreturn out;\n"
+   },
+   "name": "리마인드 대상 계산",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    460,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "b",
+       "leftValue": "={{ $json.name }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "대상 없음?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst c=$json;\nreturn [{json:{...c,prompt:`너는 수원 영통의 속눈썹 샵 \"하어스\" 사장님 말투로 재방문 안내 카톡을 쓰는 비서야.\n조건: 3문장 이내, 존댓말, 친근하지만 과하지 않게, 이모지 최대 1개, 할인·가격 언급 금지, 마지막은 예약 가능 시간을 안내하겠다는 말로 끝내.\n고객: ${c.name}님 / 마지막 시술: ${c.lastService} / ${c.weeks}주 전 방문 / 총 ${c.visits}회 방문.\n메시지 본문만 출력해.`}}];\n"
+   },
+   "name": "프롬프트 만들기",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    -80
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "anthropic-version",
+       "value": "2023-06-01"
+      },
+      {
+       "name": "content-type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({model:'claude-sonnet-4-5',max_tokens:300,messages:[{role:'user',content:$json.prompt}]}) }}",
+    "options": {}
+   },
+   "name": "Claude 문구 초안",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    -80
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "REPLACE",
+     "name": "Anthropic x-api-key"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "\nconst c=$('리마인드 대상 계산').item.json;\nconst body=($json.content||[]).map(b=>b.text||'').join('').trim();\nreturn [{json:{...c,draft:body,\n  tg:`👁 ${c.name}님 · ${c.lastService} · ${c.weeks}주 전 방문 (총 ${c.visits}회)\\n연락처 ${c.phone}\\n\\n${body}`}}];\n"
+   },
+   "name": "텔레그램 문구 조립",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    -80
+   ]
+  },
+  {
+   "parameters": {
+    "chatId": "REPLACE_WITH_OWNER_CHAT_ID",
+    "text": "={{ $json.tg }}",
+    "replyMarkup": "inlineKeyboard",
+    "inlineKeyboard": {
+     "rows": [
+      {
+       "row": {
+        "buttons": [
+         {
+          "text": "✅ 보냄 처리",
+          "additionalFields": {
+           "callback_data": "=sent|{{ $json.name }}|{{ $json.phone }}"
+          }
+         },
+         {
+          "text": "⏭ 이번엔 건너뛰기",
+          "additionalFields": {
+           "callback_data": "=skip|{{ $json.name }}|{{ $json.phone }}"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "name": "사장님께 보내기 (승인 버튼)",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1540,
+    -80
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "chatId": "REPLACE_WITH_OWNER_CHAT_ID",
+    "text": "이번 주는 5주 이상 안 오신 손님이 없어요 🙂",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "name": "대상 없음 알림",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    880,
+    120
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "매주 월요일 09:00": {
+   "main": [
+    [
+     {
+      "node": "시술기록 읽기",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "보냄기록 읽기",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "시술기록 읽기": {
+   "main": [
+    [
+     {
+      "node": "리마인드 대상 계산",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "보냄기록 읽기": {
+   "main": [
+    [
+     {
+      "node": "리마인드 대상 계산",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "리마인드 대상 계산": {
+   "main": [
+    [
+     {
+      "node": "대상 없음?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "대상 없음?": {
+   "main": [
+    [
+     {
+      "node": "프롬프트 만들기",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "대상 없음 알림",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "프롬프트 만들기": {
+   "main": [
+    [
+     {
+      "node": "Claude 문구 초안",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Claude 문구 초안": {
+   "main": [
+    [
+     {
+      "node": "텔레그램 문구 조립",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "텔레그램 문구 조립": {
+   "main": [
+    [
+     {
+      "node": "사장님께 보내기 (승인 버튼)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

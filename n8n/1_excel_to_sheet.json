@@ -1,0 +1,260 @@
+{
+ "name": "HAUUS 1 · 엑셀 올리면 시술기록 등록",
+ "nodes": [
+  {
+   "parameters": {
+    "updates": [
+     "message"
+    ],
+    "additionalFields": {}
+   },
+   "name": "텔레그램 수신",
+   "type": "n8n-nodes-base.telegramTrigger",
+   "typeVersion": 1.1,
+   "position": [
+    0,
+    0
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "a",
+       "leftValue": "={{ $json.message.document?.file_name || '' }}",
+       "rightValue": "\\.(xlsx|xls|csv)$",
+       "operator": {
+        "type": "string",
+        "operation": "regex"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "name": "엑셀 파일인가?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "file",
+    "fileId": "={{ $json.message.document.file_id }}",
+    "additionalFields": {}
+   },
+   "name": "파일 내려받기",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    440,
+    -80
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "operation": "xlsx",
+    "options": {}
+   },
+   "name": "엑셀 읽기",
+   "type": "n8n-nodes-base.extractFromFile",
+   "typeVersion": 1,
+   "position": [
+    660,
+    -80
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "\n// 엑셀 행 → 시술기록 행 (네이버 내보내기 컬럼명 자동 인식)\nconst pick=(row,res)=>{for(const k of Object.keys(row)){for(const r of res){if(r.test(k))return row[k]}}return ''};\nconst toDate=v=>{if(v==null||v==='')return null;if(typeof v==='number'){const d=new Date(Math.round((v-25569)*86400000));return isNaN(d)?null:d}\n  const m=String(v).match(/(\\d{4})[.\\-\\/년]\\s*(\\d{1,2})[.\\-\\/월]\\s*(\\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);const d=new Date(v);return isNaN(d)?null:d};\nconst fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;\nconst out=[];\nfor(const {json:r} of $input.all()){\n  const name=String(pick(r,[/예약자명/,/고객명/,/이름/])).trim(); const d=toDate(pick(r,[/이용일/,/시술일/,/예약일/]));\n  if(!name||!d)continue;\n  const phone=String(pick(r,[/연락처/,/전화/])).trim(); const service=String(pick(r,[/예약상품/,/시술/,/메뉴/])).trim();\n  const no=String(pick(r,[/예약번호/])).trim()||[name,phone,fmt(d),service].join('|');\n  out.push({json:{예약번호:no,이용일:fmt(d),고객명:name,연락처:phone,시술:service,상태:String(pick(r,[/예약상태/,/상태/])||'이용완료').trim(),\n    금액:Number(String(pick(r,[/결제금액/,/금액/])).replace(/[^\\d]/g,''))||0,메모:String(pick(r,[/요청사항/,/메모/])).trim()}});\n}\nreturn out;\n"
+   },
+   "name": "기록으로 변환",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    -80
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "appendOrUpdate",
+    "documentId": {
+     "__rl": true,
+     "mode": "id",
+     "value": "REPLACE_WITH_GOOGLE_SHEET_ID"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "시술기록"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "matchingColumns": [
+      "예약번호"
+     ],
+     "schema": []
+    },
+    "options": {}
+   },
+   "name": "시술기록 저장 (예약번호 기준 중복 방지)",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1100,
+    -80
+   ],
+   "credentials": {
+    "googleSheetsOAuth2Api": {
+     "id": "REPLACE",
+     "name": "Google Sheets account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "chatId": "={{ $('텔레그램 수신').item.json.message.chat.id }}",
+    "text": "=시술 기록 {{ $('기록으로 변환').all().length }}건을 확인해서 시트에 반영했어요. 월요일 아침에 리마인드 대상을 보내드릴게요.",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "name": "등록 완료 알림",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1320,
+    -80
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "chatId": "={{ $json.message.chat.id }}",
+    "text": "네이버 예약 엑셀(.xlsx)을 파일로 보내주시면 시술 기록을 자동 등록해요.",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "name": "안내",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    440,
+    120
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "REPLACE",
+     "name": "HAUUS Telegram bot"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "텔레그램 수신": {
+   "main": [
+    [
+     {
+      "node": "엑셀 파일인가?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "엑셀 파일인가?": {
+   "main": [
+    [
+     {
+      "node": "파일 내려받기",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "안내",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "파일 내려받기": {
+   "main": [
+    [
+     {
+      "node": "엑셀 읽기",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "엑셀 읽기": {
+   "main": [
+    [
+     {
+      "node": "기록으로 변환",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "기록으로 변환": {
+   "main": [
+    [
+     {
+      "node": "시술기록 저장 (예약번호 기준 중복 방지)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "시술기록 저장 (예약번호 기준 중복 방지)": {
+   "main": [
+    [
+     {
+      "node": "등록 완료 알림",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

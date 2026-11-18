@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HAUUS 재방문 관리</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#faf7f4;--panel:#ffffff;--ink:#1f1b24;--muted:#6f6774;--line:#e8e0dc;--soft:#f3eeeb;
+  --rose:#b55a76;--rose-soft:#f6e6ec;--plum:#1f1b24;--plum-ink:#faf7f4;
+  --ok:#3f7d5c;--ok-soft:#e4f1ea;--warn:#a04e22;--warn-soft:#fbe9df;--grey:#777;--grey-soft:#ececec;
+  --tabh:56px;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;
+  --bg:#17141b;--panel:#221d27;--ink:#f3eef0;--muted:#a79fab;--line:#352e3b;--soft:#2a2430;--rose:#e08aa5;--rose-soft:#3a2630;--plum:#f3eef0;--plum-ink:#17141b;--ok:#8fd1ad;--ok-soft:#1f3328;--warn:#f0a070;--warn-soft:#3b2719;--grey:#aaa;--grey-soft:#2f2a34}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#17141b;--panel:#221d27;--ink:#f3eef0;--muted:#a79fab;--line:#352e3b;--soft:#2a2430;--rose:#e08aa5;--rose-soft:#3a2630;--plum:#f3eef0;--plum-ink:#17141b;--ok:#8fd1ad;--ok-soft:#1f3328;--warn:#f0a070;--warn-soft:#3b2719;--grey:#aaa;--grey-soft:#2f2a34}
+html{scroll-padding-top:calc(72px + env(safe-area-inset-top,0px))}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--panel);z-index:10}
+
+/* header + tabs */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .in{max-width:1040px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:14px}
+.brand{font-weight:700;font-size:17px;letter-spacing:-.01em;white-space:nowrap}
+.brand span{color:var(--rose);font-weight:500;font-size:13px;margin-left:6px}
+nav.tabs{display:flex;gap:2px;margin-left:8px}
+nav.tabs a{color:var(--muted);text-decoration:none;padding:8px 12px;border-radius:10px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px}
+nav.tabs a[aria-current="page"]{background:var(--plum);color:var(--plum-ink)}
+nav.tabs a .n{background:var(--rose);color:#fff;font-size:11px;border-radius:999px;padding:0 6px;line-height:16px}
+nav.tabs a[aria-current="page"] .n{background:var(--rose)}
+.spacer{flex:1}
+.upl{display:flex;gap:8px}
+input[type=file]{display:none}
+
+/* bottom tab bar on mobile */
+@media (max-width:760px){
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;margin:0;background:var(--panel);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:9;justify-content:space-around}
+  nav.tabs a{flex-direction:column;gap:2px;font-size:11px;padding:6px 4px;border-radius:10px;position:relative}
+  nav.tabs a .ic{font-size:20px;line-height:1}
+  nav.tabs a .n{position:absolute;top:2px;right:6px}
+  main{padding-bottom:calc(var(--tabh) + 40px + env(safe-area-inset-bottom,0px)) !important}
+  .upl .btn span{display:none}
+}
+@media (min-width:761px){nav.tabs a .ic{display:none}}
+
+main{max-width:1040px;margin:0 auto;padding:18px 16px 60px}
+.view{display:none}.view.on{display:block}
+h2{font-size:17px;font-weight:700;margin:22px 0 10px}
+h2:first-child{margin-top:4px}
+.sub{color:var(--muted);font-size:13px;margin:-6px 0 12px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--rose)}
+.btn:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.btn.primary{background:var(--rose);border-color:var(--rose);color:#fff}
+.btn.quiet{color:var(--muted)}
+.btn.small{padding:5px 10px;font-size:13px;border-radius:8px}
+.btn.danger{color:#b03a3a}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stat b{display:block;font-size:24px;font-weight:700;line-height:1.1}
+.stat small{color:var(--muted);font-size:12.5px}
+.stat.hot{background:var(--plum);color:var(--plum-ink);border-color:var(--plum)}
+.stat.hot small{color:var(--plum-ink);opacity:.75}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.card .top2{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.who{font-weight:700;font-size:16px}
+.meta{color:var(--muted);font-size:13px;margin-top:2px}
+.badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500;vertical-align:middle}
+.badge.due{background:var(--warn-soft);color:var(--warn)}
+.badge.sent{background:var(--ok-soft);color:var(--ok)}
+.badge.grey{background:var(--grey-soft);color:var(--grey)}
+.badge.warn{background:#fde8e8;color:#b03a3a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .badge.warn{background:#3d2222;color:#f0a0a0}}
+:root[data-theme="dark"] .badge.warn{background:#3d2222;color:#f0a0a0}
+.badge.s2{background:var(--ok-soft);color:var(--ok)}.badge.s1{background:var(--warn-soft);color:var(--warn)}.badge.s0{background:var(--grey-soft);color:var(--grey)}
+textarea,input[type=text],input[type=url],input[type=number],input[type=search],select{border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;background:var(--panel);color:var(--ink)}
+textarea{width:100%;line-height:1.55;resize:vertical;overflow:hidden;background:var(--bg)}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.row label{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.row input[type=number]{width:64px}
+.row input[type=search]{flex:1;min-width:160px}
+.seg{display:inline-flex;background:var(--soft);border-radius:10px;padding:3px}
+.seg button{appearance:none;border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:8px;font:inherit;font-size:13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:12.5px;position:sticky;top:0;background:var(--panel)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.clickable{cursor:pointer}tr.clickable:hover td{background:var(--rose-soft)}
+.chev{color:var(--muted);font-size:11px;margin-left:4px;display:inline-block;transition:transform .15s}
+tr.open .chev{transform:rotate(180deg)}
+tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px 14px}
+.visits .v{display:grid;grid-template-columns:96px 1.4fr 84px 64px 2fr;gap:8px;font-size:13px;padding:3px 0;border-top:1px dashed var(--line)}
+.visits .v.x{opacity:.5}
+.visits .v span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.memo{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
+.memo textarea{min-height:60px;margin:0}
+.empty{color:var(--muted);font-size:14px;padding:18px;border:1px dashed var(--line);border-radius:14px;text-align:center}
+.drop{border:2px dashed var(--rose);background:var(--rose-soft);border-radius:16px;padding:26px 20px;text-align:center;cursor:pointer}
+.drop.over{background:var(--panel)}
+.drop strong{display:block;font-size:17px;margin-bottom:4px}
+.drop p{margin:0;color:var(--muted);font-size:13px}
+.log{font-size:13px;color:var(--muted);padding-left:18px}.log li{margin:2px 0}
+.toast{position:fixed;left:50%;bottom:calc(var(--tabh) + 24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--plum);color:var(--plum-ink);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:20}
+@media (min-width:761px){.toast{bottom:24px}}
+.toast.show{opacity:1}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+.prod{display:grid;grid-template-columns:72px 1fr auto;gap:14px;align-items:center}
+.prod img{width:72px;height:72px;object-fit:contain;border-radius:10px;background:#fff;border:1px solid var(--line)}
+.prod b{display:block}
+.prod small{display:block;color:var(--muted);font-size:12.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}.prod{grid-template-columns:60px 1fr}.prod select{grid-column:2}}
+.hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.field label{font-size:13px;color:var(--muted)}
+.field input,.field textarea{width:100%}
+.field .inl{display:flex;gap:8px;align-items:center}
+.field .inl input[type=number]{width:70px}
+.pill{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border-radius:999px;padding:4px 10px 4px 6px;font-size:13px;margin-right:6px}
+.pill b{background:var(--panel);border-radius:999px;padding:0 7px;font-weight:600}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:none}
+.srow .t{font-size:14px}.srow .t small{display:block;color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <div class="brand">HAUUS<span>재방문 관리</span></div>
+  <nav class="tabs" aria-label="메뉴">
+    <a href="#today"><span class="ic">📅</span>오늘 <span class="n" id="nDue" hidden>0</span></a>
+    <a href="#customers"><span class="ic">👥</span>손님</a>
+    <a href="#records"><span class="ic">🧾</span>시술 기록</a>
+    <a href="#products"><span class="ic">🧴</span>제품·재고</a>
+    <a href="#stats"><span class="ic">📈</span>통계</a>
+    <a href="#settings"><span class="ic">⚙️</span>설정</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="upl"><button class="btn primary small" id="btnUpload" type="button">⬆ <span>엑셀 올리기</span></button><input id="file" type="file" accept=".xlsx,.xls,.csv"></div>
+</div></div>
+
+<main>
+<!-- ===== 오늘 ===== -->
+<section class="view" id="v-today">
+  <div class="stats">
+    <div class="stat hot"><b id="sDue">0</b><small>이번 주 연락할 손님</small></div>
+    <div class="stat"><b id="sSentWeek">0</b><small>이번 주 보냄</small></div>
+    <div class="stat"><b id="sCustomers">0</b><small>전체 손님</small></div>
+    <div class="stat"><b id="sMonthVisits">0</b><small>이번 달 시술</small></div>
+  </div>
+  <h2>이번 주 리마인드</h2>
+  <div class="row">
+    <div class="seg" id="dueFilter"><button aria-pressed="true" data-f="todo">안 보낸 손님</button><button aria-pressed="false" data-f="all">전체</button></div>
+    <label style="margin-left:auto">정렬 <select id="dueSort"><option value="days">오래된 순</option><option value="visits">단골 순</option></select></label>
+  </div>
+  <div id="dueList"></div>
+</section>
+
+<!-- ===== 손님 ===== -->
+<section class="view" id="v-customers">
+  <div class="row"><input type="search" id="q" placeholder="이름 또는 번호 뒷자리로 찾기">
+    <div class="seg" id="custFilter"><button aria-pressed="true" data-f="all">전체</button><button aria-pressed="false" data-f="due">리마인드</button><button aria-pressed="false" data-f="repeat">2회 이상</button><button aria-pressed="false" data-f="memo">메모 있음</button><button aria-pressed="false" data-f="warn">⚠ 노쇼·취소</button></div>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>손님</th><th>연락처</th><th class="num">방문</th><th>마지막 방문</th><th>마지막 시술</th><th class="num">경과</th><th>상태</th></tr></thead>
+    <tbody id="custBody"></tbody>
+  </table></div>
+  <p class="hint">손님 줄을 누르면 방문 내역과 메모가 열려요. ⚠ 표시는 노쇼가 1회 이상이거나 노쇼·취소 합쳐 2회 이상인 손님이에요. 예약 받을 때 참고하세요.</p>
+</section>
+
+<!-- ===== 시술 기록 ===== -->
+<section class="view" id="v-records">
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="엑셀 파일 올리기">
+    <strong>네이버 예약 엑셀을 여기에 올려 주세요</strong>
+    <p>스마트플레이스 → 예약 관리 → 엑셀 다운로드 (.xlsx). 이미 있는 예약은 건너뛰고 새 것만 등록돼요.</p>
+  </div>
+  <div class="row" style="margin-top:14px"><label>월 <select id="monthSel"></select></label>
+    <span class="pill">시술 <b id="mCount">0</b></span><span class="pill">매출 <b id="mRev">0</b></span><span class="pill">취소·노쇼 <b id="mSkip">0</b></span>
+    <button class="btn small quiet" id="btnDemo" type="button" style="margin-left:auto">샘플 데이터 넣기</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>이용일</th><th>손님</th><th>시술</th><th class="num">금액</th><th>상태</th><th>요청사항</th></tr></thead>
+    <tbody id="recBody"></tbody>
+  </table></div>
+  <h2>업로드 내역</h2>
+  <ul class="log" id="log"></ul>
+</section>
+
+<!-- ===== 제품·재고 ===== -->
+<section class="view" id="v-products">
+  <h2>매장 제품 재고</h2>
+  <p class="sub">재고를 바꾸면 리마인드 문구에 붙는 고객 페이지 링크가 바뀌고, 손님은 그 링크에서 현재 재고를 봐요.</p>
+  <div id="prodList"></div>
+  <div class="card"><b>손님이 보는 링크</b><div class="hint" id="careLinkPreview" style="word-break:break-all"></div>
+    <div class="acts"><a class="btn small" id="openCare" target="_blank" rel="noopener">고객 페이지 열어보기</a><button class="btn small" id="copyCare" type="button">링크 복사</button></div></div>
+  <p class="hint">제품 이름·사진·가격을 바꾸려면 고객 페이지 파일(hauus_care.html)을 수정해야 해요. 재고 상태만 여기서 바꿀 수 있어요.</p>
+</section>
+
+<!-- ===== 통계 ===== -->
+<section class="view" id="v-stats">
+  <div class="stats">
+    <div class="stat"><b id="tRevisit">0%</b><small>재방문율 (2회 이상 손님 비율)</small></div>
+    <div class="stat"><b id="tReturnShare">0%</b><small>이번 달 시술 중 재방문 손님</small></div>
+    <div class="stat"><b id="tSentTotal">0</b><small>리마인드 보낸 누적</small></div>
+    <div class="stat"><b id="tCameBack">0</b><small>리마인드 후 다시 온 손님</small></div>
+  </div>
+  <h2>월별 매출</h2>
+  <div class="card"><svg class="chart" id="chRev" viewBox="0 0 640 220" role="img" aria-label="월별 매출 막대 그래프"></svg><div class="legend"><span><i style="background:var(--rose)"></i>매출(만원)</span></div></div>
+  <h2>월별 시술 수 · 재방문</h2>
+  <div class="card"><svg class="chart" id="chVisits" viewBox="0 0 640 220" role="img" aria-label="월별 시술 수와 재방문 손님 수"></svg><div class="legend"><span><i style="background:var(--line)"></i>전체 시술</span><span><i style="background:var(--ok)"></i>재방문 손님 시술</span></div></div>
+  <p class="hint">재방문 손님 = 그 달 이전에 한 번이라도 방문한 적 있는 손님. 리마인드 후 다시 온 손님 = 보냄 처리한 날짜 이후에 새 방문 기록이 생긴 손님.</p>
+</section>
+
+<!-- ===== 설정 ===== -->
+<section class="view" id="v-settings">
+  <h2>리마인드 기준</h2>
+  <div class="card">
+    <div class="srow"><div class="t">속눈썹 펌<small>마지막 방문 후 이 주수가 지나면 연락</small></div><div class="field" style="margin:0"><div class="inl"><input type="number" id="wPerm" min="2" max="26"> 주</div></div></div>
+    <div class="srow"><div class="t">속눈썹 연장<small>연장은 보통 더 빨리 빠져요</small></div><div class="field" style="margin:0"><div class="inl"><input type="number" id="wExt" min="2" max="26"> 주</div></div></div>
+    <div class="srow"><div class="t">연장 리터치</div><div class="field" style="margin:0"><div class="inl"><input type="number" id="wTouch" min="2" max="26"> 주</div></div></div>
+  </div>
+  <h2>문구 템플릿</h2>
+  <p class="sub">쓸 수 있는 자리: <code>{이름}</code> <code>{시술}</code> <code>{주}</code> <code>{링크}</code> <code>{예약}</code> <code>{메모}</code></p>
+  <div class="card">
+    <div class="field"><label>펌 손님에게</label><textarea id="tPerm" rows="3"></textarea></div>
+    <div class="field"><label>연장 손님에게</label><textarea id="tExt" rows="3"></textarea></div>
+    <div class="field"><label>리터치 손님에게</label><textarea id="tTouch" rows="3"></textarea></div>
+    <div class="acts"><button class="btn small quiet" id="tReset" type="button">기본 문구로 되돌리기</button></div>
+  </div>
+  <h2>링크</h2>
+  <div class="card">
+    <div class="field"><label>고객 케어 페이지</label><input type="url" id="careUrl" placeholder="https://"></div>
+    <div class="field"><label>네이버 예약 링크</label><input type="url" id="naverUrl" placeholder="https://naver.me/..."></div>
+  </div>
+  <h2>데이터</h2>
+  <div class="card">
+    <div class="srow"><div class="t">백업 복사<small>기록·메모·보냄 표시를 글자로 복사해요. 메모장에 붙여 두면 폰을 바꿔도 복원할 수 있어요.</small></div><button class="btn small" id="bkCopy" type="button">복사</button></div>
+    <div class="srow"><div class="t">복원<small>복사해 둔 백업 글자를 붙여넣고 복원을 누르세요.</small></div><button class="btn small" id="bkRestore" type="button">복원</button></div>
+    <textarea id="bkText" rows="3" placeholder="여기에 백업 내용을 붙여넣기"></textarea>
+    <div class="srow" style="margin-top:8px"><div class="t">모든 기록 지우기<small>이 기기에서만 지워져요.</small></div><button class="btn small danger" id="btnReset" type="button">지우기</button></div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const KEY='hauus-revisit-v2';
+  const $=id=>document.getElementById(id);
+  const SKIP=/취소|노쇼|거절|대기/;
+  const DEFAULT_T={
+    perm:'{이름}님 안녕하세요, 하어스예요 :)\n{시술} 받으신 지 {주}주 정도 지났어요. 슬슬 컬이 풀릴 때라, 생각나시면 편하게 예약해 주세요.\n\n관리법·영양제 보기: {링크}\n네이버 예약: {예약}',
+    ext:'{이름}님 안녕하세요, 하어스예요 :)\n{시술} 받으신 지 {주}주 정도 지났어요. 빠진 만큼만 채우는 리터치로 가볍게 유지해 드릴게요.\n\n관리법·영양제 보기: {링크}\n네이버 예약: {예약}',
+    touch:'{이름}님 안녕하세요, 하어스예요 :)\n리터치 받으신 지 {주}주 정도 지났어요. 더 빠지기 전에 한 번 더 채우면 예쁘게 유지돼요.\n\n관리법·영양제 보기: {링크}\n네이버 예약: {예약}'
+  };
+  const PRODUCTS=[{k:'a',name:'MAREN 콜라겐 펩타이드 마스카라 에센스',sub:'15ml · 55,000원',img:'data:image/jpeg;base64,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'},{k:'b',name:'MAREN 에센스 마스카라 듀얼 (클리어+블랙)',sub:'5ml+5ml · 65,000원',img:'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCADwAMMDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD6hooooAKKKKACilwfQ0YPoaAEopcH0NGD6GgBKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACkZFkUo4yrDBHqKWlX7woAwGsLTJ/0aPr7006dZ/wDPun5n/Grb/eP1pDQBUOnWf/Pun5n/ABqN9PswD/o6/mf8a5zx9ql7pslmLO5vrYShgZUii+zIc9ZZXVtntgc1d8KxatHpssutavbao0x3xPbxqqRpj7oZcb/rgfSgDsdLAGnWwHQIAKtVW0z/AJB1v/uCrNABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABSr1FJSr94UAZT/eP1php79T9ajNAHI+O0MbWd1LYT3truW3ZbbUJLaUM7hVwAQjDJ/iIxUfgSPw9HaaivhqGWDE3+lxSs7MsuO+4kZx3UkUfEK1Vrdb260ZdXsrOJpZIZb4xRgg5yY8FXPoT0q/4fvZJDe2E+lQ6Y9kEAhhlV0KupIIwoA6HjFAHZaZ/yDrf/cFWaraZ/wAg+3/3BVmgAqvfXBt4QypvZmCgfWrFVdS/1Uf/AF1WgCjd397DdqqWu6DGWfdyPoMc/nVhrqYW8sqqcoM7WAGfasnxf4ksdBtm+3L5jlN6RFODzgZc/KOfU1nfDnXh4psG1FQYUdtxtnlVimDgcDp9KAOytJWmt0kdCjHqp7HNS1DZjEGP9pv5mpqACiiigAoBB6Gqer6jbaXp8t3eTRxRIpOXYDcfQZ6n2rA8C6+vim2fVbWN47Pc0SrJwxIODxQB1dFFFABRRRQAUUUUAFFFFABSr1FJSr1FAGS/U/WmGnv1NMagDhvHzRSXLRTaTJqcNvZPdzRnUGt4zGG5BQcOeO9WPBgWH+07Y6fJZ3CGKSQyXrXTSBk+X5254AxjtVrxfI1lG94YdKMDwG2me9mdCyk/6tQqtuzk8dTSeFZb+7t7q91TSYtMmmKqirIzNJGq4VmUgFPYdcdcUAdvpn/IPt/9wVZqtpn/ACD7f/cFWaACquo/6lP+ui1aqlrJIsGIBJBBAAzQB4X8btbvBpt2h+0wRzDYARcxKwPG3DExNx2IHfHNO/ZfiKpfSHq8fcDP3h3xn9fwrkfjCY/s/wAscaSDCvshiQ49/LkY9f7wx7g13H7MJU6XfbXVsAcdxz9en4fjQB7faf6n/gTfzNTVDZ/6k/77fzNTUAFFFFAHlnxv8RHTNMmtBLHHutmbDS7d5OQBseNkfp03KeeK5X9lCTOm61H5u/BjYr/dzu455/T8aX9o4s8NyPMkiWONGyUugkhwRtyMwHr3Ge2RVv8AZVL/APCM6mpHyLKmDluSQSe5Hp0/GgD3GiiigAooooAKKKKACiiigApV60lKOtAGU3U1G1PbqaYaAMDxDoWlalPBqGqCZJbNW8uaO4ki8sHqflI/OrGm6dBp0Ei20l1IknzZuLh5j07FycUnioE6BehepQfzH6VagObOIkYJjXj8KAN3TP8AkH2/+4Ks1W03/kH2/wDuCrNABVPV132TLjO5gMcf1q5VXUzi2BJA+dev1oA+Zfi9aK1uzqNp3D5fMhYDtwI4wB/33+Brov2Y53Bu4nVF3RY4UgnB+mPz5q78dbb+yrBJ7qQTNdFwjYc7AMdi2O4/wrpPgPYWLeDbPUrXaZZC6yFUCYYHGCOe2Oh70AelWX+pP++386nqCy/1Tf77fzqegAooooA8L/aM0tZrC7u/JfckSnzFs5G56AGUOFH02mq/7KMq/wBl6zDuQNuRgoKZwMjJxz369K7j43aSl54M1C7d0VYIcMphjZmywAwWUnv2IrmP2X7CI+FrrVY8rJJM1vIhLHO0KQc5x/F6etAHtdFFFABRRRQAUUUUAFFFFABSjrSUo60AZLdTTDT26mmGgDN14gaXNlQw+UFcA5+YdiD/ACNTRZNtGXGG2DI98VW8Sf8AIGuMkqBtO4DJX5hz+FWIm3WsbeqA/pQBuab/AMeFv/uCrNVtN/48IP8AcFWaACqupDNrg/3l/nVqqupKGtcMMgsufzoA8g/abt5pPC+n3cbKbeKVo3XHO5gMH/x0/nV39m5z/wAK1lJyMXcmP++Vq78dktW+Hrw3TMHWdGj2nJwM5OO4xx9aPgJYRWPw4sSZIxJeSNcuoPQEgKD+Cg/jQB6RZHMT/wC+386nqvYHMLkdPMb+dWKACiiigDifjSwX4Z60WOBsQH/vta5T9lv/AJJ7dr6X7/8AoCV1XxqyfhlrWMZ2p16f6xa5P9lw/wDFB3w9L4/+gLQB7HRRRQAUUUUAFFFFABRRRQAUo60lKOtAGQ3U000496Y1AGZ4iBOi3e1A52dCMjr6YOfpU8BLWcLHqY1P6VX8QgnR7gBlQkDlm2jqO9TwALZwqMYEajj6UAbum/8AHhB/uirNVtN/48IP90VZoAKqaokj2bCE4fcpBK57jtVumTfc/EfzoA8Y+K+keLfEFvLp9no8txZI26OZpERyc5OQWxjgds1F8PU8Uabqun2+r6HJBpsdnHbSiOdDl0YlZMBvcZFe13X3DWC2PNP1oA1tKVVtWCHK+Y2D7Zq5VLR/+PP/AIG386u0AFFFI3Q0AcN8b2K/DDWivXbH/wCjFrkf2Vyf+EJ1MHte/wDtNa9kvo0lhKSojoeqsoIP4Gua2JbSstsiwqTkiMBQfyoA6miqOjuz2zF2LEORyc9hV6gAooooAKKKKACiiigApR1pKUUAY56mmtTj3phoAyvEzFNEunBxtAOc47irUIItYgeojGfyqv4idYtGuZJM7UAbggZwRjkgj8xViEAWsQHQIB+lAG5pv/HhB/u1Zqtpv/HhB/u1ZoAKZN9wfUfzp9Mm+4PqP50AZXim4vbeyQ6am+d328x7wBjqRuHH0z/Wsy3uBJKsbHdL5SyFguAc+gycfTn61L48O2ztnCXDMsuR5LFSOh/uN3APTtVDToBBcQqmdiWqIPl44/2jgn6ECgDqNH/48v8Agbfzq7VLSP8AjyH+8386u0AFI33TS0jfdNAFfV7pLOykuJQxjQZbbjOPxIrmorlbtI51jliWQZCTLscD3HatbxlgaHKWS1kUMpK3WNh54zkEdcGuU07c72EgjiCZmx5ABjVSeAGGB+XWgDtNF/49X/3z/IVfqhov/Hq3++f6VfoAKKKKACiiigAooooAKUUlLQBjHqaaacaaaAMnxMyJoly0pYIu0ttxnG4dM8fnVuE5tojnOUHPrxUGvtAmk3DXYcwAAtsOD1HfIx9c1YRg8KMoIUqCA3XGO9AG5pv/AB4Qf7tWKr6b/wAeEH+7VigApk33B/vCn1HP9wf7woAwfHbbdFfdJfRoThntCoIGD97JGV9gc9KzNPXdcQzogWN7VANq7R6gAZOOvSum1iytb6FUvbaK4VG3qJEDBW6ZGe/NZCIsZCRqFRRgKOgFAG1pH/HkP95v51cqnpH/AB5L/vN/OrlABSP900tI/wB00AZ3ieEz6TMq273DcFY0l8ok5/vdq47T/MxpXnRlX2OCsgYtGcfdyxJ46Z79q7HxPYf2npE9piDMgH+vjMiDBBztBHPHHPBrmtN01dPtre3ZhI8O4BwMdTnpQB1Ojf8AHo3++f6Veqjo3/Ho3++f6VeoAKKKKACiiigAooooAKKKWgDFNNNOPemmgDP1yze/0ya1ikETybcP/dwwOR78VYVdkSqTkhQM+tSmmN0oA2dN/wCPCD/dqxVfTf8Ajwg/3asUAFZ3iDVrHRNMe+1W6jtbSNlDSSHgEnAHuc1o15T+04VHwoud+dv2y3zj/foA2NV+Kvgu2UedrkQ3dMROf5LWLB8TvB9w7GLWYyB38qT/AOJr5YabTjDH9qSYoGQttJ5XB3D+VQW72h05dgkEo3bj/CeTjH4YoA+8fC1/aapokF5p86XFrKWKSIeD8xBrVrzb9nXH/Co9H29PMnx/39avSaACkf7ppaDz1oAZdfcNc3P/AK8/Wqnxhv7zTfhxrN5ptzJbXcKIY5Yzhl+dQcfgTXHfs3avqHibwxqd1r13Lf3Ed0ER5jkquwHAoA9V0b/j0b/fP9KvU2ONI12xqFHXAp1ABRRRQAUUUUAFFFFABRRR60AYx70004jrTTQAw1G1SGmNQBs6d/x4Qf7tWKr6d/x4Qf7tWKACvJv2of8Akkd3/wBfdv8A+h16zXk37UP/ACSS6/6/Lf8A9DoA+Qbx/wBwR7VLZ/8AHmagvRiE/SpLI/6HQB9l/s5/8kh0X/en/wDRrV6VXm37On/JINE/3p//AEa1ek0AFFFFAHD/ABtGfhZ4gx2iQ/8AkRa4X9kr/kS9X/6/R/6LFd18cDj4T+JD6W4P/j61wv7JDbvBGrH/AKfR/wCixQB7lRRRQAUUUUAFFFFABRRRQAUetFHY0AY56mmmnnqaYaAGGo2qRqjbpQBs6d/x4Qf7tWKr6b/x4Qf7tWKACvJf2o/+SS3P/X7b/wDodetV5H+1L/ySaf8A6/rf/wBCNAHyFf8A+q/CnWX/AB50y+/1Zp9l/wAedAH2d+zp/wAkf0P6z/8Ao169Jrzf9nX/AJI/of1m/wDRr16RQAUUUUAcN8bZrZfhjr8FxdW9vJcWzJCJpAnmMCG2jPU8dK4X9k65so/A93afbLY6hJfO5txIPM2hEAbb1x15rQ/aegjk8F2UkoJRLgjGGI5XqcDHbvivNP2WRL/wkcap5nk7pSxHmbSQmBnnZ+fP6UAfV1FFFABRRRQAUUUUAFFFFABTJnEUTuRkKM4FPqG+/wCPOb/dNRUbjFtDirtI5w6tET/q3/So5NYiTJMUn6Vld6huehr57+0q/f8AA9T6pT7F6bxLbRnmCY/lVf8A4Sm1bpbz/mK529PJqkh5NZvNMR3/AANFgqT6Hsmhzrc6PZzICFkjDAHqKu1k+EufDOm/9cRWtX0tOTlBSfVHkTVpNIK8i/al/wCSTzf9f1v/AOhGvXa8i/amOPhRJ739v/M1ZJ8h3n+rNPs/+POm3mNlLZ/8edAH2f8As7f8kg0L/tt/6NevSK84/Z3/AOSP6D/22/8ARr16PQAUUUUAeU/tKQeb8OSwYKyXKkZYDPytwMkZ+g5ryL9lRxJ4xEe2LdHFNIWKx7+QB1xv79jivdvjmsjfDLV2hZlKKrMVDE7c8/dBPf6evFeG/skhH8Zah8rbktWYH5sDJUfT+tAH1fRRRQAUUUUAFFFFABRRRQAUHkHPSig9DQByevXH2Qw7G8ovu+YQeYBjB5x26/nVCS+l+zo4liyWcEiyYjjGOOvfrXTMrgnkU3a3rS5UO7ORuLqbyoyJBlpMHFjnI/p9a0NO8q5tneRLeQhyMrBs/Q81uFD61BLFuzzS5Y9guzW0tQun26qAqheABgCrVQ2IAs4QM4C45qaqEFeQftUnHwpb31C3H6tXr9cJ8atBt/EfgaWxu3mRPtMUitEQCGBOOoPHJoA+IbvmOn2g/wBDr2Kb4VacyAG7u/f5RSR/CmxEO1Ly6A/3RQB7f+zx/wAkf0D6Tf8Ao169GrkfhPpcWieAdL06BpGjgEgDSEZOXYnp9a66gAooooA474w232r4ZeIY8ZxbF8bQehB7kenr+fSvDf2Q7dT4p8STc7o7VEHHq/uc9vSvoXx9YjUvBetWbO0YmtmQsoUkD/gXH515l+z14Wg8N6hrbRzzyy3Ece4uFCABmxtAHvQB7XRRRQAUUUUAFFFFABRRRQAUHpRSNypoAzbu3WfblUbGfvHioTZrsC7YepPU4rQ8ugx1HMyrIzHtFKgbYuDn7xqWGFI0I/djJz8tWzDntTfIHpS5pBZFq2wIEx0xUlMhG2JR6Cn1oiQrI8Uw+fpDpjPzqf1rXqtqEfmWpU+ooA4FtMGPu0JpoCdK6s2g9KBaDHSgCz4bi8nR4Y/Qt/M1p1BYJ5dqq+mf51PQAUUUUAVNYBbTLlRnLIRwcVznguzFpfXJAxvT+tdTdLvgZfWqun24ilJA7YoAv0UUUAFFFFABRRRQB//Z'}];
+  const STOCK={'2':'재고 있음','1':'소량 남음','0':'일시 품절'};
+
+  // ---------- state ----------
+  function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);const o=localStorage.getItem('hauus-revisit-v1');if(o){const v=JSON.parse(o);return {records:v.records||{},sent:v.sent||{},log:v.log||[],links:v.links||{},stock:v.stock||{}}}}catch(e){}return null}
+  const state=Object.assign({records:{},sent:{},memos:{},log:[],weeks:{perm:5,ext:3,touch:3},tpl:{...DEFAULT_T},links:{care:'https://claude.ai/artifact/SSxBJbNgkxzUUHsS4GmFHR',naver:'https://naver.me/FkambIDP'},stock:{a:'2',b:'2'}},load()||{});
+  if(typeof state.weeks==='number')state.weeks={perm:state.weeks,ext:Math.max(2,state.weeks-2),touch:Math.max(2,state.weeks-2)};
+  state.tpl=Object.assign({...DEFAULT_T},state.tpl||{}); state.memos=state.memos||{}; state.stock=Object.assign({a:'2',b:'2'},state.stock||{});
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2200)}
+
+  // ---------- helpers ----------
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
+  const daysSince=s=>Math.floor((today()-new Date(s))/86400000);
+  const won=n=>n.toLocaleString('ko-KR');
+  function toDate(v){if(v==null||v==='')return null;if(v instanceof Date)return isNaN(v)?null:v;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?new Date(d.y,d.m-1,d.d):null}
+    const s=String(v).trim();const m=s.match(/(\d{4})[.\-\/년]\s*(\d{1,2})[.\-\/월]\s*(\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);const d=new Date(s);return isNaN(d)?null:d}
+  function kind(svc){if(/리터치/.test(svc||''))return 'touch';if(/연장/.test(svc||''))return 'ext';return 'perm'}
+  const careLink=k=>state.links.care?`${state.links.care}#${k||'perm'}-a${state.stock.a}-b${state.stock.b}`:'';
+  const warnBadge=c=>c.warn?` <span class="badge warn" title="노쇼 ${c.ns}회, 취소 ${c.cx}회">⚠ ${c.ns?`노쇼 ${c.ns}`:''}${c.ns&&c.cx?' · ':''}${c.cx?`취소 ${c.cx}`:''}</span>`:'';
+  function draft(c){
+    const k=kind(c.lastService);
+    const memo=state.memos[c.key]||'';
+    return (state.tpl[k]||DEFAULT_T[k]).replace(/\{이름\}/g,c.name).replace(/\{시술\}/g,c.lastService||'시술').replace(/\{주\}/g,c.weeks).replace(/\{링크\}/g,careLink(k)).replace(/\{예약\}/g,state.links.naver||'').replace(/\{메모\}/g,memo).replace(/\n{3,}/g,'\n\n').trim();
+  }
+
+  // ---------- import ----------
+  const COLS={name:[/예약자명/,/고객명/,/이름/,/성명/],phone:[/연락처/,/전화/,/휴대폰/],service:[/예약상품/,/시술\s*종류/,/시술명/,/시술/,/메뉴/],date:[/이용일/,/시술일/,/방문일/,/예약일/],status:[/예약상태/,/상태/],amount:[/결제금액/,/금액/],memo:[/요청사항/,/메모/],no:[/예약번호/]};
+  function mapHeaders(h){const m={};for(const k in COLS){for(const re of COLS[k]){const i=h.findIndex(x=>re.test(String(x||'')));if(i>=0&&!Object.values(m).includes(i)){m[k]=i;break}}}return m}
+  function handleFile(file){const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];ingest(XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''}),file.name)}catch(err){toast('파일을 읽지 못했어요. 엑셀(.xlsx) 파일인지 확인해 주세요.')}};r.readAsArrayBuffer(file)}
+  function ingest(rows,label){
+    let hi=rows.findIndex(r=>r.some(c=>/예약자명|고객명|이름/.test(String(c))));if(hi<0)hi=0;
+    const m=mapHeaders(rows[hi].map(h=>String(h).trim()));
+    if(m.name==null||m.date==null){toast('이름 또는 이용일 컬럼을 찾지 못했어요.');return}
+    let added=0,dup=0,skipped=0;
+    for(let i=hi+1;i<rows.length;i++){const r=rows[i];if(!r||r.every(c=>c==='')) continue;
+      const name=String(r[m.name]||'').trim(),d=toDate(r[m.date]);if(!name||!d)continue;
+      const rec={no:m.no!=null?String(r[m.no]||'').trim():'',name,phone:m.phone!=null?String(r[m.phone]||'').trim():'',service:m.service!=null?String(r[m.service]||'').trim():'',date:fmt(d),status:(m.status!=null?String(r[m.status]||'').trim():'')||'이용완료',amount:m.amount!=null?Number(String(r[m.amount]).replace(/[^\d.-]/g,''))||0:0,memo:m.memo!=null?String(r[m.memo]||'').trim():''};
+      const id=rec.no||[rec.name,rec.phone,rec.date,rec.service].join('|');
+      if(state.records[id]){dup++;continue}state.records[id]=rec;added++;if(SKIP.test(rec.status))skipped++}
+    state.log.unshift(`${fmt(new Date())} · ${label} · 새로 등록 ${added}건 (중복 ${dup}, 취소·노쇼 ${skipped})`);state.log=state.log.slice(0,20);
+    save();render();toast(added?`시술 기록 ${added}건 등록했어요`:'새로 등록할 기록이 없어요 (모두 이미 있음)');
+  }
+
+  // ---------- aggregate ----------
+  function customers(){
+    const map={};
+    for(const id in state.records){const r=state.records[id];const key=r.name+'|'+r.phone;
+      const c=map[key]||(map[key]={key,name:r.name,phone:r.phone,visits:0,last:'',first:'9999',lastService:'',ns:0,cx:0,lastSkip:''});
+      if(SKIP.test(r.status)){if(/노쇼/.test(r.status))c.ns++;else c.cx++;if(r.date>c.lastSkip)c.lastSkip=r.date;continue}
+      c.visits++;if(r.date>c.last){c.last=r.date;c.lastService=r.service}if(r.date<c.first)c.first=r.date}
+    return Object.values(map).map(c=>{c.risk=c.ns+c.cx;c.warn=c.risk>=2||c.ns>=1;
+      if(!c.visits){c.days=daysSince(c.lastSkip);c.weeks=Math.floor(c.days/7);c.k='perm';c.thr=5;c.sentAt=null;c.sentValid=false;c.over=false;c.due=false;c.memo=state.memos[c.key]||'';c.last=c.lastSkip;c.lastService='(방문 없음)';return c}
+      c.days=daysSince(c.last);c.weeks=Math.floor(c.days/7);c.k=kind(c.lastService);c.thr=state.weeks[c.k]||5;c.sentAt=state.sent[c.key]||null;c.sentValid=!!(c.sentAt&&c.sentAt>=c.last);c.over=c.days>=c.thr*7;c.due=c.over&&!c.sentValid;c.memo=state.memos[c.key]||'';return c}).sort((a,b)=>b.days-a.days);
+  }
+
+  // ---------- routing ----------
+  const VIEWS=['today','customers','records','products','stats','settings'];
+  function route(){let h=(location.hash||'#today').slice(1);if(!VIEWS.includes(h))h='today';
+    VIEWS.forEach(v=>$('v-'+v).classList.toggle('on',v===h));
+    document.querySelectorAll('nav.tabs a').forEach(a=>{if(a.getAttribute('href')==='#'+h)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+    window.scrollTo(0,0)}
+  window.addEventListener('hashchange',route);
+
+  // ---------- render ----------
+  let dueF='todo',custF='all';
+  function render(){
+    const recs=Object.values(state.records);const cs=customers();const done=recs.filter(r=>!SKIP.test(r.status));
+    const t=today();const ym=fmt(t).slice(0,7);const weekAgo=fmt(new Date(t-6*86400000));
+    const dueN=cs.filter(c=>c.due).length;
+    $('nDue').textContent=dueN;$('nDue').hidden=!dueN;
+    $('sDue').textContent=dueN;$('sCustomers').textContent=cs.filter(c=>c.visits>0).length;
+    $('sSentWeek').textContent=Object.values(state.sent).filter(d=>d>=weekAgo).length;
+    $('sMonthVisits').textContent=done.filter(r=>r.date.startsWith(ym)).length;
+
+    // 오늘
+    let due=cs.filter(c=>c.over&&(dueF==='all'||c.due));
+    if($('dueSort').value==='visits')due=[...due].sort((a,b)=>b.visits-a.visits);
+    const dl=$('dueList');dl.innerHTML='';
+    if(!recs.length)dl.innerHTML=`<div class="empty">아직 기록이 없어요. 오른쪽 위 <b>엑셀 올리기</b>로 네이버 예약 목록을 올리거나, 시술 기록 탭에서 샘플 데이터를 넣어 보세요.</div>`;
+    else if(!due.length)dl.innerHTML=`<div class="empty">${dueF==='todo'?'이번 주 연락할 손님을 모두 처리했어요 🎉':'기준 주수를 넘긴 손님이 없어요.'}</div>`;
+    due.forEach(c=>{const el=document.createElement('div');el.className='card';
+      el.innerHTML=`<div class="top2"><div><div class="who">${esc(c.name)} <span class="badge ${c.sentValid?'sent':'due'}">${c.sentValid?`보냄 ${c.sentAt}`:`${c.weeks}주 경과`}</span>${c.visits>=3?' <span class="badge grey">단골</span>':''}${warnBadge(c)}</div>
+        <div class="meta">${esc(c.phone||'연락처 없음')} · 마지막 ${c.last} ${esc(c.lastService)} · 총 ${c.visits}회${c.memo?` · 📝 ${esc(c.memo)}`:''}</div></div></div>
+        <textarea aria-label="보낼 문구">${esc(draft(c))}</textarea>
+        <div class="acts"><button class="btn primary small" data-a="copy">문구 복사</button><button class="btn small" data-a="sent">${c.sentValid?'보냄 취소':'보냄 처리'}</button><button class="btn small quiet" data-a="skip">이번엔 건너뛰기</button><a class="btn small quiet" href="#customers" data-a="go">손님 정보</a></div>`;
+      const ta=el.querySelector('textarea');const fit=()=>{ta.rows=ta.value.split('\n').length+1};ta.oninput=fit;fit();
+      el.querySelector('[data-a=copy]').onclick=()=>navigator.clipboard.writeText(ta.value).then(()=>toast('복사했어요. 카톡이나 문자에 붙여넣으세요.'),()=>toast('복사가 막혔어요. 문구를 직접 선택해 복사해 주세요.'));
+      el.querySelector('[data-a=sent]').onclick=()=>{if(c.sentValid)delete state.sent[c.key];else state.sent[c.key]=fmt(new Date());save();render()};
+      el.querySelector('[data-a=skip]').onclick=()=>{state.sent[c.key]=fmt(new Date());save();render();toast('이번 주는 건너뛰었어요')};
+      el.querySelector('[data-a=go]').onclick=()=>{$('q').value=c.name;custF='all';syncSeg('custFilter',custF)};
+      dl.appendChild(el)});
+
+    // 손님
+    const q=$('q').value.trim();const tb=$('custBody');tb.innerHTML='';
+    const list=cs.filter(c=>(!q||c.name.includes(q)||c.phone.includes(q))&&(custF==='all'||(custF==='due'&&c.due)||(custF==='repeat'&&c.visits>=2)||(custF==='memo'&&c.memo)||(custF==='warn'&&c.warn)));
+    if(!list.length)tb.innerHTML=`<tr><td colspan="7" style="color:var(--muted)">해당하는 손님이 없어요.</td></tr>`;
+    list.forEach(c=>{const tr=document.createElement('tr');tr.className='clickable';tr.tabIndex=0;
+      tr.innerHTML=`<td>${esc(c.name)}${c.memo?' 📝':''}${warnBadge(c)} <span class="chev">▾</span></td><td>${esc(c.phone)}</td><td class="num">${c.visits}</td><td>${c.last}</td><td>${esc(c.lastService)}</td><td class="num">${c.weeks}주</td><td>${c.due?'<span class="badge due">리마인드</span>':(c.sentValid?'<span class="badge sent">보냄</span>':'')}</td>`;
+      const det=document.createElement('tr');det.className='detail';det.hidden=true;
+      const visits=recs.filter(r=>r.name===c.name&&r.phone===c.phone).sort((a,b)=>b.date.localeCompare(a.date));
+      det.innerHTML=`<td colspan="7"><div class="memo"><textarea placeholder="메모: 컬 취향, 글루 민감, 렌즈 착용 등" aria-label="${esc(c.name)} 메모">${esc(c.memo)}</textarea><button class="btn small" data-a="memo">저장</button></div>
+        <div class="visits">${visits.map(r=>`<div class="v ${SKIP.test(r.status)?'x':''}"><span>${r.date}</span><span>${esc(r.service)}</span><span>${r.amount?won(r.amount)+'원':''}</span><span>${esc(r.status)}</span><span>${esc(r.memo)}</span></div>`).join('')}${c.sentAt?`<div class="v"><span>${c.sentAt}</span><span>리마인드 보냄/건너뜀</span></div>`:''}</div></td>`;
+      const tg=()=>{det.hidden=!det.hidden;tr.classList.toggle('open',!det.hidden)};tr.onclick=tg;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tg()}};
+      det.querySelector('[data-a=memo]').onclick=()=>{const v=det.querySelector('textarea').value.trim();if(v)state.memos[c.key]=v;else delete state.memos[c.key];save();toast('메모를 저장했어요');render()};
+      tb.appendChild(tr);tb.appendChild(det)});
+
+    // 시술 기록
+    const months=[...new Set(recs.map(r=>r.date.slice(0,7)))].sort().reverse();
+    const ms=$('monthSel');const cur=ms.value||months[0]||'';ms.innerHTML=months.map(m=>`<option value="${m}">${m.replace('-','년 ')}월</option>`).join('')+'<option value="">전체</option>';ms.value=months.includes(cur)?cur:(cur===''&&months.length?'':months[0]||'');
+    const sel=ms.value;const mrec=recs.filter(r=>!sel||r.date.startsWith(sel)).sort((a,b)=>b.date.localeCompare(a.date));
+    const mdone=mrec.filter(r=>!SKIP.test(r.status));
+    $('mCount').textContent=mdone.length;$('mRev').textContent=won(mdone.reduce((s,r)=>s+r.amount,0))+'원';$('mSkip').textContent=mrec.length-mdone.length;
+    const rb=$('recBody');rb.innerHTML=mrec.map(r=>`<tr${SKIP.test(r.status)?' style="opacity:.5"':''}><td>${r.date}</td><td>${esc(r.name)}</td><td>${esc(r.service)}</td><td class="num">${r.amount?won(r.amount):''}</td><td>${esc(r.status)}</td><td>${esc(r.memo)}</td></tr>`).join('')||`<tr><td colspan="6" style="color:var(--muted)">기록이 없어요.</td></tr>`;
+    $('log').innerHTML=state.log.map(l=>`<li>${esc(l)}</li>`).join('');
+
+    // 제품
+    const pl=$('prodList');pl.innerHTML='';
+    PRODUCTS.forEach(p=>{const el=document.createElement('div');el.className='card prod';
+      el.innerHTML=`<img src="${p.img}" alt=""><div><b>${p.name}</b><small>${p.sub}</small><span class="badge s${state.stock[p.k]}" style="margin-top:6px">${STOCK[state.stock[p.k]]}</span></div><select aria-label="${p.name} 재고"><option value="2">재고 있음</option><option value="1">소량 남음</option><option value="0">일시 품절</option></select>`;
+      const s=el.querySelector('select');s.value=state.stock[p.k];s.onchange=()=>{state.stock[p.k]=s.value;save();render();toast('재고를 링크에 반영했어요')};pl.appendChild(el)});
+    const cl=careLink('perm');$('careLinkPreview').textContent=cl||'설정에서 고객 페이지 링크를 넣어 주세요';$('openCare').href=cl||'#products';
+
+    // 통계
+    const vis=cs.filter(c=>c.visits>0);const repeat=vis.filter(c=>c.visits>=2).length;$('tRevisit').textContent=vis.length?Math.round(repeat/vis.length*100)+'%':'0%';
+    const byMonth={};const firstVisit={};
+    done.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{const m=r.date.slice(0,7);const k=r.name+'|'+r.phone;const o=byMonth[m]||(byMonth[m]={rev:0,n:0,ret:0});o.rev+=r.amount;o.n++;if(firstVisit[k]&&firstVisit[k]<m)o.ret++;if(!firstVisit[k])firstVisit[k]=m});
+    const tm=byMonth[ym];$('tReturnShare').textContent=tm&&tm.n?Math.round(tm.ret/tm.n*100)+'%':'–';
+    const sentKeys=Object.keys(state.sent);$('tSentTotal').textContent=sentKeys.length;
+    $('tCameBack').textContent=sentKeys.filter(k=>done.some(r=>r.name+'|'+r.phone===k&&r.date>state.sent[k])).length;
+    const mk=Object.keys(byMonth).sort();
+    bars($('chRev'),mk,[{v:mk.map(m=>Math.round(byMonth[m].rev/10000)),c:'var(--rose)'}],v=>v+'만');
+    bars($('chVisits'),mk,[{v:mk.map(m=>byMonth[m].n),c:'var(--line)'},{v:mk.map(m=>byMonth[m].ret),c:'var(--ok)'}],v=>v+'');
+
+    // 설정 값
+    $('wPerm').value=state.weeks.perm;$('wExt').value=state.weeks.ext;$('wTouch').value=state.weeks.touch;
+    if(document.activeElement!==$('tPerm'))$('tPerm').value=state.tpl.perm;if(document.activeElement!==$('tExt'))$('tExt').value=state.tpl.ext;if(document.activeElement!==$('tTouch'))$('tTouch').value=state.tpl.touch;
+    $('careUrl').value=state.links.care||'';$('naverUrl').value=state.links.naver||'';
+  }
+  function bars(svg,labels,series,fmtv){
+    const W=640,H=220,L=36,R=12,T=16,B=34;const n=labels.length;svg.innerHTML='';
+    if(!n){svg.innerHTML=`<text x="320" y="110" text-anchor="middle" fill="var(--muted)" font-size="14">데이터가 없어요</text>`;return}
+    const max=Math.max(1,...series.flatMap(s=>s.v));const iw=(W-L-R)/n;const bw=Math.min(48,iw*0.7/series.length);
+    let g='';[0.5,1].forEach(f=>{const y=T+(H-T-B)*(1-f);g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="3 3"/><text x="${L-6}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--muted)">${fmtv(Math.round(max*f))}</text>`});
+    labels.forEach((lb,i)=>{const cx=L+iw*i+iw/2;series.forEach((s,j)=>{const v=s.v[i];const h=(H-T-B)*v/max;const x=cx-(bw*series.length)/2+j*bw;g+=`<rect x="${x}" y="${H-B-h}" width="${bw-2}" height="${h}" rx="4" fill="${s.c}"/>`;if(v)g+=`<text x="${x+(bw-2)/2}" y="${H-B-h-4}" text-anchor="middle" font-size="11" fill="var(--ink)">${fmtv(v)}</text>`});g+=`<text x="${cx}" y="${H-10}" text-anchor="middle" font-size="12" fill="var(--muted)">${lb.slice(2).replace('-','.')}</text>`});
+    svg.innerHTML=g;
+  }
+  function syncSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===val));render()}
+
+  // ---------- events ----------
+  $('btnUpload').onclick=()=>$('file').click();$('drop').onclick=()=>$('file').click();
+  $('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}};
+  $('file').onchange=()=>{if($('file').files[0])handleFile($('file').files[0]);$('file').value=''};
+  ['dragenter','dragover'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over')}));
+  ['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('over')}));
+  $('drop').addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)handleFile(f)});
+  document.querySelectorAll('#dueFilter button').forEach(b=>b.onclick=()=>{dueF=b.dataset.f;syncSeg('dueFilter',dueF)});
+  document.querySelectorAll('#custFilter button').forEach(b=>b.onclick=()=>{custF=b.dataset.f;syncSeg('custFilter',custF)});
+  $('dueSort').onchange=render;$('q').oninput=render;$('monthSel').onchange=render;
+  ['wPerm','wExt','wTouch'].forEach(id=>$(id).onchange=()=>{const k={wPerm:'perm',wExt:'ext',wTouch:'touch'}[id];state.weeks[k]=Math.max(2,Math.min(26,+$(id).value||state.weeks[k]));save();render()});
+  [['tPerm','perm'],['tExt','ext'],['tTouch','touch']].forEach(([id,k])=>$(id).oninput=()=>{state.tpl[k]=$(id).value;save()});
+  [['tPerm','perm'],['tExt','ext'],['tTouch','touch']].forEach(([id,k])=>$(id).onchange=render);
+  $('tReset').onclick=()=>{state.tpl={...DEFAULT_T};save();render();toast('기본 문구로 되돌렸어요')};
+  $('careUrl').onchange=()=>{state.links.care=$('careUrl').value.trim();save();render()};
+  $('naverUrl').onchange=()=>{state.links.naver=$('naverUrl').value.trim();save();render()};
+  $('copyCare').onclick=()=>navigator.clipboard.writeText(careLink('perm')).then(()=>toast('링크를 복사했어요'));
+  $('bkCopy').onclick=()=>navigator.clipboard.writeText(JSON.stringify(state)).then(()=>toast('백업을 복사했어요. 메모장에 붙여 두세요.'),()=>{$('bkText').value=JSON.stringify(state);toast('아래 칸에 백업을 넣어 두었어요. 전체 선택해서 복사하세요.')});
+  $('bkRestore').onclick=()=>{try{const v=JSON.parse($('bkText').value);if(!v.records)throw 0;Object.assign(state,v);save();render();$('bkText').value='';toast('복원했어요')}catch(e){toast('백업 내용을 읽지 못했어요')}};
+  $('btnReset').onclick=()=>{if(confirm('이 기기의 시술 기록·메모·보냄 표시를 모두 지울까요?')){state.records={};state.sent={};state.memos={};state.log=[];save();render();toast('모두 지웠어요')}};
+
+  // ---------- 샘플 (네이버예약_예약목록_하어스_20261001-20261101.xlsx 와 동일) ----------
+  const SAMPLE=[["261001861870","이용완료","박서영","010-2733-6931","펌 포인트 연장","2026-10-01",80000,"주차 가능한가요?"],["261001192426","이용완료","함수연","010-6835-9506","마스카라 연장","2026-10-01",60000,""],["261001372102","취소","심채은","010-5544-3613","마스카라 연장","2026-10-01",60000,""],["261001506741","취소","최지후","010-2245-7980","브로우 리프트 펌","2026-10-01",40000,""],["261002201728","이용완료","남지현","010-9427-2789","하어스 클리닉 펌","2026-10-02",45000,""],["261003555917","이용완료","현세아","010-8822-8010","타샵 제거","2026-10-03",10000,"시간 조금 늦을 수 있어요"],["261003972591","이용완료","한주아","010-7276-7559","하어스 클리닉 펌","2026-10-03",45000,"지난번이랑 똑같이요"],["261003542111","이용완료","양지민","010-3013-4926","하어스 펌","2026-10-03",40000,"시간 조금 늦을 수 있어요"],["261005669666","이용완료","가예원","010-3146-5440","하어스 펌","2026-10-05",40000,""],["261005928307","이용완료","옥하린","010-4557-8504","펌 포인트 연장","2026-10-05",80000,"주차 가능한가요?"],["261005839077","이용완료","장예린","010-5697-7712","하어스 클리닉 펌","2026-10-05",45000,"지난번이랑 똑같이요"],["261006232124","이용완료","금예나","010-5339-2670","타샵 제거","2026-10-06",10000,"주차 가능한가요?"],["261006310392","이용완료","금지아","010-7221-2163","하어스 펌","2026-10-06",40000,""],["261006522344","이용완료","주다현","010-6314-1339","언더 펌","2026-10-06",30000,"렌즈 착용합니다"],["261007758498","이용완료","한지유","010-2460-2548","마스카라 연장","2026-10-07",60000,"자연스럽게 해주세요"],["261007818499","이용완료","심채은","010-5544-3613","클래식 연장","2026-10-07",60000,""],["261007937663","이용완료","남서윤","010-7167-1750","하어스 펌","2026-10-07",40000,""],["261007118621","이용완료","심현서","010-7772-2345","하어스 클리닉 펌","2026-10-07",45000,""],["261007200722","이용완료","가은서","010-9494-6093","클래식 연장","2026-10-07",60000,"렌즈 착용합니다"],["261008310694","이용완료","심채은","010-5544-3613","마스카라 연장","2026-10-08",60000,"자연스럽게 해주세요"],["261008697583","이용완료","고세은","010-9677-9253","하어스 클리닉 펌","2026-10-08",45000,""],["261009815530","이용완료","함수연","010-6835-9506","펌 포인트 연장","2026-10-09",80000,"지난번이랑 똑같이요"],["261009474957","이용완료","안도연","010-4999-4521","클래식 연장","2026-10-09",60000,""],["261009960853","이용완료","옥지윤","010-8611-7494","하어스 펌","2026-10-09",40000,"자연스럽게 해주세요"],["261009478875","이용완료","형하율","010-6288-5654","하어스 클리닉 펌","2026-10-09",45000,"자연스럽게 해주세요"],["261009221016","이용완료","가예원","010-3146-5440","클래식 연장","2026-10-09",60000,"C컬 원해요"],["261010838943","이용완료","백하윤","010-7015-8185","클래식 연장","2026-10-10",60000,""],["261010630244","이용완료","엄시아","010-2990-3269","펌 포인트 연장","2026-10-10",80000,"C컬 원해요"],["261010765490","이용완료","남윤아","010-8572-1608","하어스 펌","2026-10-10",40000,""],["261010894982","이용완료","최지후","010-2245-7980","브로우 리프트 펌","2026-10-10",40000,""],["261010460182","이용완료","금지아","010-7221-2163","하어스 펌","2026-10-10",40000,""],["261010627208","이용완료","남지현","010-9427-2789","하어스 펌","2026-10-10",40000,"자연스럽게 해주세요"],["261010818990","이용완료","성시은","010-9357-5772","하어스 펌","2026-10-10",40000,""],["261010973410","이용완료","백하윤","010-7015-8185","하어스 클리닉 펌","2026-10-10",45000,""],["261012298188","이용완료","연민서","010-3320-9841","클래식 연장","2026-10-12",60000,"주차 가능한가요?"],["261013941842","이용완료","길민지","010-6993-9074","하어스 클리닉 펌","2026-10-13",45000,""],["261013173979","이용완료","길민지","010-6993-9074","하어스 펌","2026-10-13",40000,""],["261013605490","이용완료","피소율","010-5036-1943","하어스 클리닉 펌","2026-10-13",45000,"C컬 원해요"],["261013211330","이용완료","한다은","010-8505-2787","브로우 리프트 펌","2026-10-13",40000,""],["261013125485","이용완료","모예은","010-3625-1025","하어스 펌","2026-10-13",40000,"지난번이랑 똑같이요"],["261014139254","이용완료","맹윤아","010-5969-1290","마스카라 연장","2026-10-14",60000,""],["261014899011","이용완료","주예진","010-7834-3959","언더 펌","2026-10-14",30000,"시간 조금 늦을 수 있어요"],["261014678469","이용완료","남은채","010-2283-9144","클래식 연장","2026-10-14",60000,""],["261014743158","이용완료","마서윤","010-5166-7426","타샵 제거","2026-10-14",10000,"주차 가능한가요?"],["261014639832","이용완료","형하율","010-6288-5654","클래식 연장","2026-10-14",60000,"C컬 원해요"],["261015696369","이용완료","태하은","010-9136-6366","펌 포인트 연장","2026-10-15",80000,"주차 가능한가요?"],["261015604655","이용완료","진다은","010-5166-9377","하어스 펌","2026-10-15",40000,""],["261016253673","취소","모채원","010-2882-3688","클래식 연장","2026-10-16",60000,""],["261017298779","이용완료","가가윤","010-8858-3920","하어스 펌","2026-10-17",40000,""],["261017293500","이용완료","박서영","010-2733-6931","마스카라 연장","2026-10-17",60000,""],["261017220530","이용완료","허민아","010-5986-7799","클래식 연장","2026-10-17",60000,""],["261017313819","이용완료","마유빈","010-6865-3837","하어스 펌","2026-10-17",40000,"자연스럽게 해주세요"],["261017280870","이용완료","심채은","010-5544-3613","클래식 연장","2026-10-17",60000,""],["261018981028","취소","장예린","010-5697-7712","하어스 클리닉 펌","2026-10-18",45000,""],["261018265703","취소","장예린","010-5697-7712","하어스 클리닉 펌","2026-10-18",45000,""],["261019396846","이용완료","피소율","010-5036-1943","하어스 펌","2026-10-19",40000,"C컬 원해요"],["261019805626","이용완료","은예진","010-5777-4739","하어스 펌","2026-10-19",40000,""],["261019199873","이용완료","하하은","010-5563-3335","브로우 리프트 펌","2026-10-19",40000,"렌즈 착용합니다"],["261019707942","이용완료","가예나","010-8084-7790","클래식 연장","2026-10-19",60000,""],["261019164954","이용완료","태예린","010-5670-5417","마스카라 연장","2026-10-19",60000,"시간 조금 늦을 수 있어요"],["261019240981","이용완료","두은채","010-7813-3543","하어스 펌","2026-10-19",40000,"렌즈 착용합니다"],["261019814044","이용완료","남지현","010-9427-2789","마스카라 연장","2026-10-19",60000,""],["261020584516","이용완료","허민서","010-3616-3622","하어스 클리닉 펌","2026-10-20",45000,"주차 가능한가요?"],["261020181375","이용완료","손아린","010-8185-9037","하어스 펌","2026-10-20",40000,""],["261020901867","이용완료","도아영","010-5997-1221","하어스 클리닉 펌","2026-10-20",45000,"처음 방문이에요"],["261021201411","이용완료","길소율","010-4632-7103","펌 포인트 연장","2026-10-21",80000,"자연스럽게 해주세요"],["261021442703","이용완료","남윤아","010-8572-1608","하어스 펌","2026-10-21",40000,""],["261021509871","이용완료","주예진","010-7834-3959","하어스 클리닉 펌","2026-10-21",45000,"처음 방문이에요"],["261021589642","이용완료","복다인","010-3548-6324","브로우 리프트 펌","2026-10-21",40000,"주차 가능한가요?"],["261021547158","이용완료","옥지윤","010-8611-7494","하어스 펌","2026-10-21",40000,""],["261022640317","이용완료","한다은","010-8505-2787","펌 포인트 연장","2026-10-22",80000,"자연스럽게 해주세요"],["261022471793","이용완료","최지후","010-2245-7980","하어스 클리닉 펌","2026-10-22",45000,"처음 방문이에요"],["261022550972","이용완료","서지민","010-7697-7328","언더 펌","2026-10-22",30000,""],["261023320290","이용완료","연민서","010-3320-9841","하어스 펌","2026-10-23",40000,""],["261023730120","이용완료","남은채","010-2283-9144","하어스 클리닉 펌","2026-10-23",45000,"C컬 원해요"],["261023491280","이용완료","복소율","010-6172-1152","클래식 연장","2026-10-23",60000,""],["261023113889","이용완료","차서연","010-7224-7986","클래식 연장","2026-10-23",60000,""],["261023764803","이용완료","남지현","010-9427-2789","하어스 펌","2026-10-23",40000,"지난번이랑 똑같이요"],["261023835083","이용완료","서민지","010-9697-5892","하어스 클리닉 펌","2026-10-23",45000,""],["261024142863","이용완료","서지민","010-7697-7328","하어스 펌","2026-10-24",40000,""],["261024985273","노쇼","남윤아","010-8572-1608","하어스 펌","2026-10-24",40000,""],["261024309999","이용완료","장예린","010-5697-7712","하어스 클리닉 펌","2026-10-24",45000,""],["261024290074","이용완료","추지안","010-8537-9092","마스카라 연장","2026-10-24",60000,"시간 조금 늦을 수 있어요"],["261024527772","이용완료","모채원","010-2882-3688","클래식 연장","2026-10-24",60000,""],["261024576002","이용완료","함수연","010-6835-9506","클래식 연장","2026-10-24",60000,""],["261024477034","이용완료","이은채","010-7247-3012","하어스 펌","2026-10-24",40000,"자연스럽게 해주세요"],["261026875248","이용완료","전유나","010-3131-1267","클래식 연장","2026-10-26",60000,""],["261027488176","이용완료","길하율","010-4832-6077","클래식 연장","2026-10-27",60000,"시간 조금 늦을 수 있어요"],["261027524990","이용완료","편예진","010-9476-4959","타샵 제거","2026-10-27",10000,""],["261028304604","이용완료","양소율","010-2292-3150","하어스 펌","2026-10-28",40000,""],["261028734254","이용완료","현세아","010-8822-8010","클래식 연장","2026-10-28",60000,"지난번이랑 똑같이요"],["261028273095","이용완료","두은채","010-7813-3543","하어스 펌","2026-10-28",40000,"렌즈 착용합니다"],["261028199406","이용완료","태하은","010-9136-6366","하어스 펌","2026-10-28",40000,"주차 가능한가요?"],["261028637458","이용완료","함수연","010-6835-9506","펌 포인트 연장","2026-10-28",80000,"주차 가능한가요?"],["261028930838","이용완료","가예원","010-3146-5440","하어스 클리닉 펌","2026-10-28",45000,"자연스럽게 해주세요"],["261028116166","이용완료","천예진","010-3312-2553","클래식 연장","2026-10-28",60000,""],["261028439420","이용완료","원민서","010-6622-3837","마스카라 연장","2026-10-28",60000,"시간 조금 늦을 수 있어요"],["261028188945","이용완료","구지안","010-2460-6111","클래식 연장","2026-10-28",60000,""],["261029940649","이용완료","연민서","010-3320-9841","클래식 연장","2026-10-29",60000,"시간 조금 늦을 수 있어요"],["261029982802","이용완료","옥하린","010-4557-8504","하어스 클리닉 펌","2026-10-29",45000,""],["261029838901","노쇼","최지후","010-2245-7980","브로우 리프트 펌","2026-10-29",40000,""],["261030759959","이용완료","추지안","010-8537-9092","클래식 연장","2026-10-30",60000,"렌즈 착용합니다"],["261030524159","이용완료","국서현","010-2586-3573","하어스 클리닉 펌","2026-10-30",45000,"C컬 원해요"],["261030697356","이용완료","모채원","010-2882-3688","언더 펌","2026-10-30",30000,"자연스럽게 해주세요"],["261030728731","이용완료","윤다은","010-9773-6576","하어스 펌","2026-10-30",40000,"시간 조금 늦을 수 있어요"],["261030300223","이용완료","서민지","010-9697-5892","하어스 펌","2026-10-30",40000,"자연스럽게 해주세요"],["261030628785","이용완료","피하린","010-8233-5062","마스카라 연장","2026-10-30",60000,"자연스럽게 해주세요"],["261031713013","이용완료","마유빈","010-6865-3837","클래식 연장","2026-10-31",60000,""],["261031457537","이용완료","남아린","010-6020-7339","하어스 펌","2026-10-31",40000,"자연스럽게 해주세요"],["261031943916","이용완료","염세은","010-5999-3811","하어스 클리닉 펌","2026-10-31",45000,""],["261031899428","이용완료","현세아","010-8822-8010","클래식 연장","2026-10-31",60000,"주차 가능한가요?"],["261031370809","이용완료","서지민","010-7697-7328","클래식 연장","2026-10-31",60000,"C컬 원해요"],["261031393093","이용완료","은예진","010-5777-4739","클래식 연장","2026-10-31",60000,""],["261031221922","이용완료","봉나은","010-3961-2286","하어스 클리닉 펌","2026-10-31",45000,"지난번이랑 똑같이요"],["261031880596","이용완료","용다인","010-4628-8723","하어스 클리닉 펌","2026-10-31",45000,""],["261031879068","이용완료","마서윤","010-5166-7426","클래식 연장","2026-10-31",60000,"C컬 원해요"],["261031915779","이용완료","장지후","010-3753-9568","하어스 펌","2026-10-31",40000,"지난번이랑 똑같이요"],["261031267810","이용완료","주예진","010-7834-3959","하어스 클리닉 펌","2026-10-31",45000,""],["261031954213","이용완료","남서윤","010-7167-1750","펌 포인트 연장","2026-10-31",80000,"시간 조금 늦을 수 있어요"],["261101525340","노쇼","추지안","010-8537-9092","클래식 연장","2026-11-01",60000,""],["261101239686","취소","길하율","010-4832-6077","클래식 연장","2026-11-01",60000,""]];
+  $('btnDemo').onclick=()=>ingest([['예약번호','예약상태','예약자명','예약자 연락처','예약상품','이용일','결제금액','요청사항'],...SAMPLE],'샘플 데이터 (10/1~11/1, 121건)');
+
+  route();render();
+})();
+</script>
+</body>
+</html>
