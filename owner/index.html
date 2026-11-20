@@ -171,6 +171,7 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
 <section class="view" id="v-customers">
   <div class="row"><input type="search" id="q" placeholder="이름 또는 번호 뒷자리로 찾기">
     <div class="seg" id="custFilter"><button aria-pressed="true" data-f="all">전체</button><button aria-pressed="false" data-f="due">리마인드</button><button aria-pressed="false" data-f="repeat">2회 이상</button><button aria-pressed="false" data-f="memo">메모 있음</button><button aria-pressed="false" data-f="warn">⚠ 노쇼·취소</button></div>
+    <div class="seg"><button id="hideSent" type="button" aria-pressed="false" title="상태가 보냄인 손님을 목록에서 숨겨요">보냄 숨기기</button></div>
   </div>
   <div class="tablewrap"><table>
     <thead><tr><th>손님</th><th>연락처</th><th class="num">방문</th><th>마지막 방문</th><th>마지막 시술</th><th class="num">경과</th><th>상태</th></tr></thead>
@@ -336,7 +337,7 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
   window.addEventListener('hashchange',route);
 
   // ---------- render ----------
-  let dueF='todo',custF='all';
+  let dueF='todo',custF='all';let hideSent=false;try{hideSent=localStorage.getItem('hauus-hide-sent')==='1'}catch(e){}
   function render(){
     const recs=Object.values(state.records);const cs=customers();const done=recs.filter(r=>!SKIP.test(r.status));
     const t=today();const ym=fmt(t).slice(0,7);const weekAgo=fmt(new Date(t-6*86400000));
@@ -361,12 +362,12 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
       el.querySelector('[data-a=copy]').onclick=()=>navigator.clipboard.writeText(ta.value).then(()=>toast('복사했어요. 카톡이나 문자에 붙여넣으세요.'),()=>toast('복사가 막혔어요. 문구를 직접 선택해 복사해 주세요.'));
       el.querySelector('[data-a=sent]').onclick=()=>{if(c.sentValid)delete state.sent[c.key];else state.sent[c.key]=fmt(new Date());save();render()};
       el.querySelector('[data-a=skip]').onclick=()=>{state.sent[c.key]=fmt(new Date());save();render();toast('이번 주는 건너뛰었어요')};
-      el.querySelector('[data-a=go]').onclick=()=>{$('q').value=c.name;custF='all';syncSeg('custFilter',custF)};
+      el.querySelector('[data-a=go]').onclick=()=>{$('q').value=c.name;custF='all';hideSent=false;$('hideSent').setAttribute('aria-pressed',false);syncSeg('custFilter',custF)};
       dl.appendChild(el)});
 
     // 손님
     const q=$('q').value.trim();const tb=$('custBody');tb.innerHTML='';
-    const list=cs.filter(c=>(!q||c.name.includes(q)||c.phone.includes(q))&&(custF==='all'||(custF==='due'&&c.due)||(custF==='repeat'&&c.visits>=2)||(custF==='memo'&&c.memo)||(custF==='warn'&&c.warn)));
+    const list=cs.filter(c=>(!q||c.name.includes(q)||c.phone.includes(q))&&(custF==='all'||(custF==='due'&&c.due)||(custF==='repeat'&&c.visits>=2)||(custF==='memo'&&c.memo)||(custF==='warn'&&c.warn))&&!(hideSent&&c.sentValid));
     if(!list.length)tb.innerHTML=`<tr><td colspan="7" style="color:var(--muted)">해당하는 손님이 없어요.</td></tr>`;
     list.forEach(c=>{const tr=document.createElement('tr');tr.className='clickable';tr.tabIndex=0;
       tr.innerHTML=`<td>${esc(c.name)}${c.memo?' 📝':''}${warnBadge(c)} <span class="chev">▾</span></td><td>${esc(c.phone)}</td><td class="num">${c.visits}</td><td>${c.last}</td><td>${esc(c.lastService)}</td><td class="num">${c.weeks}주</td><td>${c.due?'<span class="badge due">리마인드</span>':(c.sentValid?'<span class="badge sent">보냄</span>':'')}</td>`;
@@ -432,6 +433,8 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:12.5px}
   $('drop').addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)handleFile(f)});
   document.querySelectorAll('#dueFilter button').forEach(b=>b.onclick=()=>{dueF=b.dataset.f;syncSeg('dueFilter',dueF)});
   document.querySelectorAll('#custFilter button').forEach(b=>b.onclick=()=>{custF=b.dataset.f;syncSeg('custFilter',custF)});
+  const syncHide=()=>$('hideSent').setAttribute('aria-pressed',hideSent);syncHide();
+  $('hideSent').onclick=()=>{hideSent=!hideSent;try{localStorage.setItem('hauus-hide-sent',hideSent?'1':'0')}catch(e){}syncHide();render()};
   $('dueSort').onchange=render;$('q').oninput=render;$('monthSel').onchange=render;
   ['wPerm','wExt','wTouch'].forEach(id=>$(id).onchange=()=>{const k={wPerm:'perm',wExt:'ext',wTouch:'touch'}[id];state.weeks[k]=Math.max(2,Math.min(26,+$(id).value||state.weeks[k]));save();render()});
   [['tPerm','perm'],['tExt','ext'],['tTouch','touch']].forEach(([id,k])=>$(id).oninput=()=>{state.tpl[k]=$(id).value;save()});
